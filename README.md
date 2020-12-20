@@ -3,7 +3,7 @@
 Work in progress.
 
 My attempt at gamma-ray spectroscopy simulator using the Monte Carlo method. My plan for this project is for it to be able to simulate the detection of a radioactive point-source over a user-specified time interval.
-For now the project is done in Python. If I walk into issues regarding computing time, I'll switch to a C++.
+For now the project is done in Python. If I walk into issues regarding computing time, I will probably switch to C++.
 
 The main purpose of this project is for me to learn the Monte Carlo method and how it is applied in the field of medical physics. The reference for this project is Vassilev - Monte Carlo Methods For Radiation Therapy, 2017.
 
