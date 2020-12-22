@@ -17,10 +17,31 @@ import matplotlib.pyplot as plt
 E = 1332
 resolution = 0.1 # Should be a function that depends on detected photon energy
 
+class Photon:
+    """
+    Energy (float) = the energy of the photon
+    Direction (list) = the direction vector of the photon in three dimensions
+    Position (list) = the coordinates of the photon in three dimensions
+    """
+    def __init__(self, energy, direction, position):
+        self.energy = energy
+        self.direction = direction
+        self.position = position
+        
+    def change_energy(self, new_energy):
+        self.energy = new_energy
+        
+    def change_direction(self, new_direction):
+        self.direction = [new_direction[i] for i in range(len(new_direction))]
+    
+    def change_position(self, new_position):
+        self.position = [new_position[i] for i in range(len(new_position))]
+
 def normal_distribution(E, E_full_peak, resolution=resolution):
     """
     Normal distribution according to Vassilev 2.10 Method 1.
     Returns energy sampled from normal distribution.
+    Can be used for other things, but be mindful of the definition of the "resolution" parameter.
     
     E = photon energy
     E_full_peak = energy value of the full peak, i.e. original photon energy
@@ -83,7 +104,17 @@ def photoelectric_absorption(E):
     """
     return normal_distribution(E,E)
 
+def emitted_counts_this_second(A, uncertainty=0):
+    """Determines a random amount of emitted counts in a single second according to a normal distribution around the given activity A.
+    A = activity
+    uncertainty = uncertainty in A (percentage)
+    
+    returns number of emitted counts in a single second
+    """
+    emitted = normal_distribution(A, A, uncertainty)
+    return emitted
 
+"""
 # Plotting results
 # Compton
 data_compton = [compton(E) for i in range(10000)]
@@ -108,3 +139,9 @@ ax.hist(energies, 500, color="black")
 #ax.set_xscale("log")
 ax.set_xlabel("Energy [keV]")
 ax.set_ylabel("Counts")
+
+A = 1000 # Bq
+emitted_cps = [emitted_counts_this_second(A,0.03*2.35) for i in range(10000)]
+fig2, ax2 = plt.subplots()
+ax2.hist(emitted_cps,100)
+"""
