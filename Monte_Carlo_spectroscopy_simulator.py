@@ -114,34 +114,29 @@ def emitted_counts_this_second(A, uncertainty=0):
     emitted = normal_distribution(A, A, uncertainty)
     return emitted
 
-"""
-# Plotting results
-# Compton
-data_compton = [compton(E) for i in range(10000)]
-photon_energies_compton, theta = zip(*data_compton)
-energies_compton = [E-i for i in photon_energies_compton]
+def detector(centre_x, centre_y, height_z, radius, distance):
+    """
+    Defines a cylinder with certain dimensions with a certain distance from the source, i.e. the origin.
+    """
+    z = np.linspace(0, height_z, 50)
+    z = [i+distance for i in z]
+    
+    theta = np.linspace(0, 2*np.pi, 50)
+    theta_grid, z_grid=np.meshgrid(theta, z)
+    
+    x_grid = radius*np.cos(theta_grid) + centre_x
+    y_grid = radius*np.sin(theta_grid) + centre_y
+    return x_grid, y_grid, z_grid
 
-#data_compton2 = [compton(1173) for i in range(10000)]
-#photon_energies_compton2, theta2 = zip(*data_compton2)
-#energies_compton2 = [E-i for i in photon_energies_compton2]
+def check_point_in_detector(x, y, z, radius, height, distance):
+    """
+    Checks if a given point is in the detector volume
+    """
+    if x**2 + y**2 < radius**2: # Are the x and y coordinates in the circle?
+        if (z > distance) and (z < height+distance): # Is the z coordinate between the distance and the height?
+            return True
+        else:
+            return False
+    else:
+        return False
 
-# Photo
-energies_photo = [photoelectric_absorption(E) for i in range(6000)]
-#energies_photo2 = [photoelectric_absorption(1173) for i in range(6000)]
-
-energies = energies_photo + energies_compton
-
-
-#plt.hist(energies)
-fig, ax = plt.subplots()
-ax.hist(energies, 500, color="black")
-#ax.set_yscale("log")
-#ax.set_xscale("log")
-ax.set_xlabel("Energy [keV]")
-ax.set_ylabel("Counts")
-
-A = 1000 # Bq
-emitted_cps = [emitted_counts_this_second(A,0.03*2.35) for i in range(10000)]
-fig2, ax2 = plt.subplots()
-ax2.hist(emitted_cps,100)
-"""
