@@ -17,6 +17,11 @@ import matplotlib.pyplot as plt
 E = 1332
 resolution = 0.1 # Should be a function that depends on detected photon energy
 
+# Detector properties
+distance = 20
+height = 2.54*3 # 3 inches
+radius = 2.54*3/2 # 1.5 inches
+
 class Photon:
     """
     Energy (float) = the energy of the photon
@@ -128,15 +133,43 @@ def detector(centre_x, centre_y, height_z, radius, distance):
     y_grid = radius*np.sin(theta_grid) + centre_y
     return x_grid, y_grid, z_grid
 
-def check_point_in_detector(x, y, z, radius, height, distance):
+def check_point_in_detector(p, radius=radius, height=height, distance=distance):
     """
     Checks if a given point is in the detector volume
     """
-    if x**2 + y**2 < radius**2: # Are the x and y coordinates in the circle?
-        if (z > distance) and (z < height+distance): # Is the z coordinate between the distance and the height?
+    if p[0]**2 + p[1]**2 <= radius**2: # Are the x and y coordinates in the circle?
+        if (p[2] >= distance) and (p[2] <= height+distance): # Is the z coordinate between the distance and the height?
             return True
         else:
             return False
     else:
         return False
 
+def sample_direction():
+    """
+    Samples a random unit vector assuming an isotropic distribution. Returns a list with x, y, z vector composants.
+    """
+    gamma = random.random()
+    mu = 2*gamma-1
+    gamma = random.random()
+    phi = 2*np.pi*gamma
+    direction = [np.sqrt(1-mu**2)*np.cos(phi), np.sqrt(1-mu**2)*np.sin(phi), mu]
+    return direction
+
+def point_of_intersection(l, pz=distance):
+    """
+    Determines the point of intersection between the plane of the detectors front side and the direction of the photon.
+    Returns the point of intersection.
+    l = vector that makes the line
+    pz = the z-coordinate of the point on the plane (the detectors circular face that points towards the source)
+    """
+    # The definitions below assume that the detector is centred in the origin and its length is oriented along the z-axis.
+    p0 = np.array([0,0,pz]) # Point on the plane
+    l0 = np.array([0,0,0]) # Point on the line
+    n = np.array([0,0,1]) # Normal vector of the plane
+    d = np.dot(p0-l0, n)/np.dot(l, n)
+    point = [i*d for i in l]
+    return point
+
+#def next_collision_point(p0, mu):
+#    return p
