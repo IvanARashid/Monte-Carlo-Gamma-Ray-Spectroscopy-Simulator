@@ -101,7 +101,7 @@ def compton(E):
         if gamma < (1 - sin2/(eps/E + E/eps)): # I honestly don't know what this condition is. Refer to Vassilev ch. 2.8
             continue_loop = False
             eps = normal_distribution(eps,E)*511 # Comment this line to get rid of normal distribution. 511 returns us to units of keV
-            return eps, theta
+            return eps, theta # this has to be changed. instead of theta, we should return a new direction vector.
         
 def photoelectric_absorption(E):
     """
@@ -171,5 +171,47 @@ def point_of_intersection(l, pz=distance):
     point = [i*d for i in l]
     return point
 
-#def next_collision_point(p0, mu):
-#    return p
+def next_interaction_point(p0, v0, mu):
+    """
+    Determines the next interaction point of the photon in a medium.
+    p0 = last known position
+    v0 = photon trajectory vector
+    mu = macroscopic interaction cross section (linear attenuation coefficient)
+    """
+    d = -1/mu * np.log(random.random()) # Path length in cm according to Vassilev section 4.2.2
+    p = [p0[i] + v0[i]*d for i in range(3)]
+    return p
+
+def interaction_type(mu, tau, sigma_c, sigma_r, kappa):
+    """
+    Determines the interaction type given the macroscopic cross sections.
+    Returns a string identifying the interaction type.
+    mu = total cross section
+    tau = photoelectric absorption cross section
+    sigma_c = compton cross section
+    sigma_r = rayleigh cross section
+    kappa = pair production cross section
+    """
+    gamma = random.random()
+    if gamma <= tau/mu:
+        return "photoelectric absorption"
+    elif (gamma > tau/mu) and (gamma <= tau/mu + sigma_c/mu):
+        return "compton"
+    elif (gamma > tau/mu + sigma_c/mu) and (gamma <= tau/mu + sigma_c/mu + sigma_r/mu):
+        return "rayleigh"
+    elif (gamma > tau/mu + sigma_c/mu + sigma_r/mu) and (gamma <= tau/mu + sigma_c/mu + sigma_r/mu + kappa/mu):
+        return "pair production"
+    
+def rayleigh(v):
+    # Sample cos_phi and sin_phi
+    continue_loop = True
+    while continue_loop:
+        eta1 = 1-2*random.random()
+        eta2 = 1-2*random.random()
+        alpha = eta1**2 + eta2**2
+        if alpha <= 1:
+            continue_loop = False
+    cos_phi = eta1/np.sqrt(alpha)
+    sin_phi = eta2/np.sqrt(alpha)
+    
+    # Still need to sample theta
