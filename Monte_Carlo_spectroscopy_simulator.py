@@ -59,13 +59,38 @@ def normal_distribution(E, E_full_peak, resolution=resolution):
     delta = np.sqrt(12/n)*sum(gammas)
     eps = sigma*delta+mu
     return eps
+
+def scattering_direction(v, theta):
+    """
+    Determines the direction after a scattering event given the original vector and the scattering angle theta, according to Vassilev 2.13.
+    Returns list with the new vector.
+    v = photon direction vector before scattering
+    theta = scattering angle determined/sampled accourding to the scattering theory
+    """
+    # Sample cos_phi and sin_phi, phi is the azimuthal angle of the scattering event
+    continue_loop = True
+    while continue_loop:
+        eta1 = 1-2*random.random()
+        eta2 = 1-2*random.random()
+        alpha = eta1**2 + eta2**2
+        if alpha <= 1:
+            continue_loop = False
+    cos_phi = eta1/np.sqrt(alpha)
+    sin_phi = eta2/np.sqrt(alpha)
     
-def compton(E):
+    new_x = v[0]*np.cos(theta) - np.sin(theta)/np.sqrt(1-v[2]**2) * (v[0]*v[2]*cos_phi + v[1]*sin_phi)
+    new_y = v[1]*np.cos(theta) - np.sin(theta)/np.sqrt(1-v[2]**2) * (v[1]*v[2]*cos_phi - v[0]*sin_phi)
+    new_z = v[2]*np.cos(theta) + np.sqrt(1-v[2]**2)*np.sin(theta)*cos_phi
+    
+    return [new_x, new_y, new_z]
+    
+def compton(E, v):
     """
     Returns the energy of a Compton scattered photon, according to Vassilev 2.8.
     The energy is returned sampled from a Gaussian distribution. This can be disabled in the code, see comments.
     
     E = photon energy
+    v = photon direction vector
     """
     E = E/511 # Change to energy in units of electron mass
     continue_loop = True
@@ -101,11 +126,13 @@ def compton(E):
         if gamma < (1 - sin2/(eps/E + E/eps)): # I honestly don't know what this condition is. Refer to Vassilev ch. 2.8
             continue_loop = False
             eps = normal_distribution(eps,E)*511 # Comment this line to get rid of normal distribution. 511 returns us to units of keV
-            return eps, theta # this has to be changed. instead of theta, we should return a new direction vector.
+            new_v = scattering_direction(v, theta)
+            return eps, new_v
         
 def photoelectric_absorption(E):
     """
-    Neglects electron binding energy.
+    Neglects electron binding energy. (For the moment?)
+    Simply assumes a normal distribution. This will be changed later when detector theory is considered.
     """
     return normal_distribution(E,E)
 
@@ -201,17 +228,10 @@ def interaction_type(mu, tau, sigma_c, sigma_r, kappa):
         return "rayleigh"
     elif (gamma > tau/mu + sigma_c/mu + sigma_r/mu) and (gamma <= tau/mu + sigma_c/mu + sigma_r/mu + kappa/mu):
         return "pair production"
-    
+
 def rayleigh(v):
-    # Sample cos_phi and sin_phi
-    continue_loop = True
-    while continue_loop:
-        eta1 = 1-2*random.random()
-        eta2 = 1-2*random.random()
-        alpha = eta1**2 + eta2**2
-        if alpha <= 1:
-            continue_loop = False
-    cos_phi = eta1/np.sqrt(alpha)
-    sin_phi = eta2/np.sqrt(alpha)
-    
-    # Still need to sample theta
+    # Need to sample theta from the phase function
+    return False
+
+def mag(x): 
+    return np.sqrt(sum(i**2 for i in x))
