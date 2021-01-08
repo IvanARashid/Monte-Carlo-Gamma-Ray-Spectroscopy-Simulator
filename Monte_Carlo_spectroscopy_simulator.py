@@ -14,13 +14,23 @@ import random
 import scipy.integrate
 import matplotlib.pyplot as plt
 
-E = 1332
-resolution = 0.1 # Should be a function that depends on detected photon energy
+measurement_time = 60 # seconds
+
+# Source properties
+E = 662
+activity = 10000 # becquerel
+rho = 3.67
+tau = 8.544e-3*rho
+sigma_c = 6.540e-2*rho
+sigma_r = 2.671e-3*rho
+kappa = 0*rho
+mu = tau + sigma_c + sigma_r + kappa
 
 # Detector properties
-distance = 20
+distance = 10
 height = 2.54*3 # 3 inches
 radius = 2.54*3/2 # 1.5 inches
+resolution = 0.07 # Should be a function that depends on detected photon energy
 
 class Photon:
     """
@@ -28,7 +38,7 @@ class Photon:
     Direction (list) = the direction vector of the photon in three dimensions
     Position (list) = the coordinates of the photon in three dimensions
     """
-    def __init__(self, energy, direction, position):
+    def __init__(self, energy, direction, position=[0,0,0]):
         self.energy = energy
         self.direction = direction
         self.position = position
@@ -126,6 +136,7 @@ def compton(E, v):
         if gamma < (1 - sin2/(eps/E + E/eps)): # I honestly don't know what this condition is. Refer to Vassilev ch. 2.8
             continue_loop = False
             eps = normal_distribution(eps,E)*511 # Comment this line to get rid of normal distribution. 511 returns us to units of keV
+            #eps *= 511 # Comment this line if you want the normal distribution
             new_v = scattering_direction(v, theta)
             return eps, new_v
         
@@ -198,7 +209,7 @@ def point_of_intersection(l, pz=distance):
     point = [i*d for i in l]
     return point
 
-def next_interaction_point(p0, v0, mu):
+def next_interaction_point(p0, v0, mu=mu):
     """
     Determines the next interaction point of the photon in a medium.
     p0 = last known position
@@ -209,7 +220,7 @@ def next_interaction_point(p0, v0, mu):
     p = [p0[i] + v0[i]*d for i in range(3)]
     return p
 
-def interaction_type(mu, tau, sigma_c, sigma_r, kappa):
+def interaction_type(mu=mu, tau=tau, sigma_c=sigma_c, sigma_r=sigma_r, kappa=kappa):
     """
     Determines the interaction type given the macroscopic cross sections.
     Returns a string identifying the interaction type.
@@ -229,9 +240,94 @@ def interaction_type(mu, tau, sigma_c, sigma_r, kappa):
     elif (gamma > tau/mu + sigma_c/mu + sigma_r/mu) and (gamma <= tau/mu + sigma_c/mu + sigma_r/mu + kappa/mu):
         return "pair production"
 
-def rayleigh(v):
-    # Need to sample theta from the phase function
-    return False
+def rayleigh(v0):
+    """
+    Takes the direction vector of the photon and samples a new direction according to Rayleigh scattering, by using the Rayleigh phase function to sample theta.
+    The function uses the rejection method described in Vassilev 2.4.
+    v0 = current direction vector.
+    Returns new direction vector.
+    """
+    # Need to sample the angle theta from the phase function
+    loop_condition = True
+    while loop_condition:
+        eps = random.random()*np.pi # Sampled x coordinate from 0 to pi
+        eta = random.random()*(3/4)*2 # Sampled y coordinate from 0 to max of Rayleigh phase function for unpolarised light
+        if eta < 3/4*(1 + (np.cos(eps))**2): # Checks if eta is less than the Rayleigh phase function using the angle eps
+            loop_condition = False
+            
+    # Get a new direction vector for the photon
+    v = scattering_direction(v0, eps)
+    return v
 
 def mag(x): 
     return np.sqrt(sum(i**2 for i in x))
+
+def main():
+    #counts = []
+    for i in range(measurement_time): # Loop over the number of seconds
+        no_of_photons = emitted_counts_this_second(activity) # Sample number of emitted photons
+        for i in range(int(no_of_photons)): # Create a photon and follow it until it is outside the detector
+            # Create new photon
+            photon = Photon(E, sample_direction()) # sample photon with random direction
+            
+            # Change the position of the photon to the point of intersection with the plane of the detector face
+            photon.change_position(point_of_intersection(photon.direction))
+            
+            # Check if the photon is in the detector, or is on the surface of the detector
+            if check_point_in_detector(photon.position): # It has been tested that 6-7% of the photons hit the detector
+                # Sample new interaction point using the sampled path length
+                photon.change_position(next_interaction_point(photon.position, photon.direction, mu))
+                
+                # Check if the initial point is in the detector
+                loop_condition = check_point_in_detector(photon.position)
+                energy_to_be_deposited = 0
+                while loop_condition:
+                    # Determine interaction type
+                    interaction = interaction_type()
+                    if interaction == "photoelectric absorption":
+                        energy_to_be_deposited += photoelectric_absorption(photon.energy)
+                        loop_condition = False
+                    elif interaction == "compton":
+                        # Determine energy and the direction of the scattered photon
+                        new_energy, new_direction = compton(photon.energy, photon.direction)
+                        energy_to_be_deposited += photon.energy - new_energy
+                        
+                        # Change the energy and direction of the photon
+                        photon.change_energy(new_energy)
+                        photon.change_direction(new_direction)
+                        
+                        # Sample new interaction point and check whether it is in the detector
+                        photon.change_position(next_interaction_point(photon.position, photon.direction))
+                        loop_condition = check_point_in_detector(photon.position)
+                        #loop_condition = False # Need to write something that return new interaction cross sections to do multiple compton scatterings.
+                        
+                    elif interaction == "rayleigh":
+                        # Determine direction of the scattered photon
+                        new_direction = rayleigh(photon.direction)
+                        photon.change_direction(new_direction)
+                        
+                        # Sample new interaction point and check whether it is in the detector
+                        photon.change_position(next_interaction_point(photon.position, photon.direction))
+                        loop_condition = check_point_in_detector(photon.position)
+                        
+                    elif interaction == "pair production":
+                        # Not written yet, sample new interaction
+                        loop_condition = True
+                        
+                if energy_to_be_deposited != 0:
+                    counts.append(energy_to_be_deposited)
+                    
+# Things to do:
+                    # energy dependent cross sections
+                        # cross sections could be set as attributes in the Photon class
+                    # pair production
+                    # backscattering?
+
+if __name__ == "__main__":
+    counts = []
+    main()
+    plt.hist(counts, 100)
+    plt.xlim(0,1400)
+    plt.yscale("log")
+    plt.grid()
+            
