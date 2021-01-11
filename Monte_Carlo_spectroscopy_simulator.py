@@ -13,8 +13,10 @@ import numpy as np
 import random
 import scipy.integrate
 import matplotlib.pyplot as plt
+import time
+import csv
 
-measurement_time = 60 # seconds
+measurement_time = 120 # seconds
 
 # Source properties
 E = 662
@@ -32,25 +34,73 @@ height = 2.54*3 # 3 inches
 radius = 2.54*3/2 # 1.5 inches
 resolution = 0.07 # Should be a function that depends on detected photon energy
 
+"""
+energy_lst = []
+sigma_r_lst = []
+sigma_c_lst = []
+tau_lst = []
+kappa_lst = []
+"""
+
+def read_cross_sections_from_file(file):
+    """
+    Reads interaction cross sections from a csv file downloaded from NIST.
+    Returns lists of the data.
+    """
+    with open(file) as csvfile:
+        energies = []
+        sigma_r = []
+        sigma_c = []
+        tau = []
+        kappa = []
+        data = csv.reader(csvfile)
+        for i in data:
+            energies.append(float(i[0]))
+            sigma_r.append(float(i[1])*rho)
+            sigma_c.append(float(i[2])*rho)
+            tau.append(float(i[3])*rho)
+            kappa.append(float(i[4])*rho)
+    return energies, sigma_r, sigma_c, tau, kappa
+
+energy_lst, sigma_r_lst, sigma_c_lst, tau_lst, kappa_lst = read_cross_sections_from_file("NaI_cross_sections.csv")
+
 class Photon:
     """
     Energy (float) = the energy of the photon
     Direction (list) = the direction vector of the photon in three dimensions
     Position (list) = the coordinates of the photon in three dimensions
     """
-    def __init__(self, energy, direction, position=[0,0,0]):
+    def __init__(self, energy, direction, position=[0,0,0], tau=tau, sigma_c=sigma_c, sigma_r=sigma_r, kappa=kappa):
         self.energy = energy
         self.direction = direction
         self.position = position
+        self.tau = tau
+        self.sigma_c = sigma_c
+        self.sigma_r = sigma_r
+        self.kappa = kappa
+        self.mu = self.tau + self.sigma_c + self.sigma_r + self.kappa
+        
+    def change_cross_sections(self, energy_lst=energy_lst, sigma_r_lst=sigma_r_lst, sigma_c_lst=sigma_c_lst, tau_lst=tau_lst, kappa_lst=kappa_lst):
+        for i in range(len(energy_lst)):
+            if (energy_lst[i] <= self.energy*1e-3) and (energy_lst[i+1] > self.energy*1e-3): # Check if energy is within an interval
+                # Update all the cross sections (linear interpolation between points) using this index
+                self.sigma_r = sigma_r_lst[i] + (sigma_r_lst[i+1]-sigma_r_lst[i])/(energy_lst[i+1]-energy_lst[i])*(self.energy*1e-3-energy_lst[i])
+                self.sigma_c = sigma_c_lst[i] + (sigma_c_lst[i+1]-sigma_c_lst[i])/(energy_lst[i+1]-energy_lst[i])*(self.energy*1e-3-energy_lst[i])
+                self.tau = tau_lst[i] + (tau_lst[i+1]-tau_lst[i])/(energy_lst[i+1]-energy_lst[i])*(self.energy*1e-3-energy_lst[i])
+                self.kappa = kappa_lst[i] + (kappa_lst[i+1]-kappa_lst[i])/(energy_lst[i+1]-energy_lst[i])*(self.energy*1e-3-energy_lst[i])
+                self.mu = self.tau + self.sigma_c + self.sigma_r + self.kappa
+                break
         
     def change_energy(self, new_energy):
         self.energy = new_energy
+        self.change_cross_sections()
         
     def change_direction(self, new_direction):
         self.direction = [new_direction[i] for i in range(len(new_direction))]
     
     def change_position(self, new_position):
         self.position = [new_position[i] for i in range(len(new_position))]
+        
 
 def normal_distribution(E, E_full_peak, resolution=resolution):
     """
@@ -195,6 +245,10 @@ def sample_direction():
     return direction
 
 def point_of_intersection(l, pz=distance):
+    # Must fix the error here. Right now, any vector can have a point in the plane.
+    # Must make it so that only vectors pointing in the planes direction has a point there
+    # Can be done by checking whether d is positive or not.
+    # This is to prevent vectors that point away from the detector to be counted
     """
     Determines the point of intersection between the plane of the detectors front side and the direction of the photon.
     Returns the point of intersection.
@@ -276,17 +330,18 @@ def main():
             # Check if the photon is in the detector, or is on the surface of the detector
             if check_point_in_detector(photon.position): # It has been tested that 6-7% of the photons hit the detector
                 # Sample new interaction point using the sampled path length
-                photon.change_position(next_interaction_point(photon.position, photon.direction, mu))
+                photon.change_position(next_interaction_point(photon.position, photon.direction, photon.mu))
                 
                 # Check if the initial point is in the detector
                 loop_condition = check_point_in_detector(photon.position)
                 energy_to_be_deposited = 0
-                while loop_condition:
+                while loop_condition and (photon.energy >= 1):
                     # Determine interaction type
-                    interaction = interaction_type()
+                    interaction = interaction_type(photon.mu, photon.tau, photon.sigma_c, photon.sigma_r, photon.kappa)
                     if interaction == "photoelectric absorption":
                         energy_to_be_deposited += photoelectric_absorption(photon.energy)
                         loop_condition = False
+                        
                     elif interaction == "compton":
                         # Determine energy and the direction of the scattered photon
                         new_energy, new_direction = compton(photon.energy, photon.direction)
@@ -297,9 +352,8 @@ def main():
                         photon.change_direction(new_direction)
                         
                         # Sample new interaction point and check whether it is in the detector
-                        photon.change_position(next_interaction_point(photon.position, photon.direction))
+                        photon.change_position(next_interaction_point(photon.position, photon.direction, photon.mu))
                         loop_condition = check_point_in_detector(photon.position)
-                        #loop_condition = False # Need to write something that return new interaction cross sections to do multiple compton scatterings.
                         
                     elif interaction == "rayleigh":
                         # Determine direction of the scattered photon
@@ -307,7 +361,7 @@ def main():
                         photon.change_direction(new_direction)
                         
                         # Sample new interaction point and check whether it is in the detector
-                        photon.change_position(next_interaction_point(photon.position, photon.direction))
+                        photon.change_position(next_interaction_point(photon.position, photon.direction, photon.mu))
                         loop_condition = check_point_in_detector(photon.position)
                         
                     elif interaction == "pair production":
@@ -324,10 +378,13 @@ def main():
                     # backscattering?
 
 if __name__ == "__main__":
+    start_time = time.time()
+    
     counts = []
     main()
     plt.hist(counts, 100)
     plt.xlim(0,1400)
     plt.yscale("log")
     plt.grid()
-            
+    
+    print("--- {} seconds ---".format(time.time() - start_time))
